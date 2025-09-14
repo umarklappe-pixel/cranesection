@@ -102,7 +102,7 @@ if page == "Follow-up Form":
 
             add_followup({
                 "timestamp": timestamp,
-                "equipment": equipment + "-" + equipment_no,
+                "equipment": f"{section}-{equipment}",
                 "section": section,
                 "location": location,
                 "issue": issue,
