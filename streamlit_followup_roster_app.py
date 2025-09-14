@@ -22,7 +22,11 @@ def upload_to_drive(uploaded_file, folder_id=None):
     if folder_id:
         file_metadata["parents"] = [folder_id]
 
-    media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getbuffer()), mimetype=uploaded_file.type, resumable=True)
+    media = MediaIoBaseUpload(
+        io.BytesIO(uploaded_file.getbuffer()),
+        mimetype=uploaded_file.type,
+        resumable=False   # ✅ FIXED
+    )
 
     file = drive_service.files().create(
         body=file_metadata,
@@ -36,7 +40,6 @@ def upload_to_drive(uploaded_file, folder_id=None):
         body={"role": "reader", "type": "anyone"},
     ).execute()
 
-    # Return links
     return {
         "id": file["id"],
         "webViewLink": file["webViewLink"],
@@ -50,7 +53,11 @@ uploaded_file = st.file_uploader("Choose a file", type=["jpg", "jpeg", "png", "p
 
 if uploaded_file is not None:
     if st.button("Upload to Google Drive"):
-        result = upload_to_drive(uploaded_file, FOLDER_ID)
-        st.success("✅ File uploaded successfully!")
-        st.write("🔗 [Open in Google Drive](" + result["webViewLink"] + ")")
-        st.image(result["directLink"], caption="Uploaded Preview", use_column_width=True)
+        try:
+            result = upload_to_drive(uploaded_file, FOLDER_ID)
+            st.success("✅ File uploaded successfully!")
+            st.write("🔗 [Open in Google Drive](" + result["webViewLink"] + ")")
+            if uploaded_file.type.startswith("image/"):
+                st.image(result["directLink"], caption="Uploaded Preview", use_column_width=True)
+        except Exception as e:
+            st.error(f"❌ Upload failed: {e}")
