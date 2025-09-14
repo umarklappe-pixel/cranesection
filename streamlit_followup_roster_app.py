@@ -129,7 +129,7 @@ elif page == "Dashboard":
 
         for _, row in df.iterrows():
             with st.container():
-                st.markdown(f"### 🏗️ {row['equipment']} — Equipment {row['equipment_no']}")
+                st.markdown(f"### 🏗️ {row['equipment']}")
                 st.write(f"**Section:** {row['section']}")
                 st.write(f"📝 **Issue:** {row['issue']}")
 
