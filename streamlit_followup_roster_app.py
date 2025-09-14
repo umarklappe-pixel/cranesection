@@ -22,15 +22,7 @@ creds = Credentials.from_service_account_info(
 client = gspread.authorize(creds)
 
 # Open Google Sheets (make sure your service account email has Editor access)
-
-
 SHEET_NAME = "Crane Follow-up Database"
-
-
-# List all spreadsheets accessible by the service account
-sheets = client.openall()
-st.write("✅ Sheets I can access:", [s.title for s in sheets])
-
 followup_ws = client.open(SHEET_NAME).worksheet("Followups")
 roster_ws = client.open(SHEET_NAME).worksheet("Roster")
 
