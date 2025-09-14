@@ -116,7 +116,6 @@ if page == "Follow-up Form":
                 "status": ""               # future use
             })
             st.success("✅ Follow-up added successfully!")
-
 # ---------------- DASHBOARD PAGE ----------------
 elif page == "Dashboard":
     st.title("📊 Follow-up Dashboard")
@@ -125,32 +124,59 @@ elif page == "Dashboard":
     if df.empty:
         st.info("No follow-ups recorded yet.")
     else:
-        st.subheader("📌 All Records")
+        # Create columns for visual display
+        st.subheader("📌 All Follow-ups")
 
+        # Build a styled table
+        table_rows = []
         for _, row in df.iterrows():
-            with st.container():
-                st.markdown(f"### 🏗️ {row['equipment']}")
-                st.write(f"**Section:** {row['section']}")
-                st.write(f"📝 **Issue:** {row['issue']}")
+            # For image preview
+            img_html = f'<img src="{row["picture_url"]}" width="120">' if row["picture_url"] else ""
+            
+            # For audio/video player
+            if row["voice_url"]:
+                if row["voice_url"].endswith((".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".wmv", ".3gp")):
+                    media_html = f'<video src="{row["voice_url"]}" width="200" controls></video>'
+                else:
+                    media_html = f'<audio src="{row["voice_url"]}" controls></audio>'
+            else:
+                media_html = ""
 
-                cols = st.columns([1, 2])  # layout for image + text/audio
-                with cols[0]:
-                    if row['picture_url']:
-                        st.image(row['picture_url'], caption="Picture", width=200)
+            table_rows.append([
+                row["timestamp"],
+                row["equipment"],
+                row["section"],
+                row["location"],
+                row["issue"],
+                img_html,
+                media_html,
+                row["reported_by"],
+                row["status"]
+            ])
 
-                with cols[1]:
-                    if row['voice_url']:
-                        if row['voice_url'].endswith((".mp4", ".m4a")):
-                            st.video(row['voice_url'])
-                        else:
-                            st.audio(row['voice_url'])
+        # Convert to DataFrame for table
+        table_df = pd.DataFrame(table_rows, columns=[
+            "Date", "Equipment", "Section", "Location", "Issue",
+            "Picture", "Voice/Video", "Reported By", "Status"
+        ])
 
-                st.caption(f"👤 Reported by: {row['reported_by']} on {row['timestamp']}")
-                st.markdown("---")
+        # Show table with HTML so media players work
+        st.markdown(
+            table_df.to_html(escape=False, index=False),
+            unsafe_allow_html=True
+        )
 
         # Download option
         st.subheader("📥 Export Data")
         buffer = BytesIO()
+        df.to_excel(buffer, index=False, engine="openpyxl")
+        st.download_button(
+            "Download Excel",
+            buffer.getvalue(),
+            file_name="followups.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
         df.to_excel(buffer, index=False, engine="openpyxl")
         st.download_button("Download Excel", buffer.getvalue(),
                            file_name="followups.xlsx",
