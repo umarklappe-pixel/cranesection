@@ -1,137 +1,101 @@
 import streamlit as st
 import pandas as pd
-import gspread
 import cloudinary
 import cloudinary.uploader
-from google.oauth2.service_account import Credentials
 from datetime import datetime
-from io import BytesIO
+import os
 
-# ---------------- CONFIG ----------------
-st.set_page_config(page_title="Follow-up & Roster Dashboard", layout="wide")
-
-# Google Sheets Scopes
-scope = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
-# Load credentials from Streamlit Secrets
-creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"], scopes=scope
-)
-client = gspread.authorize(creds)
-
-# Cloudinary Config
+# =============== Cloudinary Setup ===============
+# Put your Cloudinary credentials in a .env file or here directly
 cloudinary.config(
-    cloud_name=st.secrets["cloudinary"]["cloud_name"],
-    api_key=st.secrets["cloudinary"]["api_key"],
-    api_secret=st.secrets["cloudinary"]["api_secret"]
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME", "your_cloud_name"),
+    api_key=os.getenv("CLOUDINARY_API_KEY", "your_api_key"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET", "your_api_secret"),
+    secure=True
 )
 
-# ---------------- SHEET CONNECTION ----------------
-SHEET_ID = "1fv-LQimF2XfCQ936Lj-kIukooQQUCJZOJsoM4SNAdjQ"
+CSV_FILE = "reports.csv"
 
-try:
-    sh = client.open_by_key(SHEET_ID)
-    st.sidebar.success(f"Connected to: {sh.title}")
-except Exception as e:
-    st.error(f"❌ Failed to connect: {e}")
-    st.stop()
+# Load or initialize CSV
+if os.path.exists(CSV_FILE):
+    df = pd.read_csv(CSV_FILE)
+else:
+    df = pd.DataFrame(columns=[
+        "section", "equipment", "problem",
+        "image_url", "audio_url", "reported_by", "timestamp"
+    ])
 
-# Ensure worksheet exists with correct headers
-try:
-    followup_ws = sh.worksheet("Followups")
-except gspread.exceptions.WorksheetNotFound:
-    followup_ws = sh.add_worksheet(title="Followups", rows="1000", cols="20")
 
-headers = ["timestamp", "section", "equipment", "problem", "image_url", "audio_url", "reported_by"]
-if followup_ws.row_values(1) != headers:
-    followup_ws.clear()
-    followup_ws.append_row(headers)
-
-# ---------------- FUNCTIONS ----------------
-def upload_to_cloudinary(file, folder="followups"):
-    result = cloudinary.uploader.upload(
-        file,
-        folder=folder,
-        resource_type="auto"
-    )
+# =============== Upload Helpers ===============
+def upload_to_cloudinary(file, folder="equipment_reports"):
+    """Upload file to Cloudinary and return URL"""
+    result = cloudinary.uploader.upload(file, folder=folder, resource_type="auto")
     return result["secure_url"]
 
-def add_followup(data):
-    followup_ws.append_row(list(data.values()))
 
-def load_followups():
-    records = followup_ws.get_all_records()
-    return pd.DataFrame(records)
+# =============== Streamlit UI ===============
+st.title("⚙️ Equipment Fault Reporting")
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Go to", ["Follow-up Sheet", "Reports"])
+with st.form("report_form"):
+    section = st.text_input("Section")
+    equipment = st.text_input("Equipment Name")
+    problem = st.text_area("Describe the Problem")
+    image = st.file_uploader("Upload Picture", type=["jpg", "jpeg", "png"])
+    audio = st.file_uploader(
+        "Upload Audio/Video",
+        type=[
+            "mp3", "wav", "aac", "m4a", "ogg", "flac",
+            "mp4", "mov", "avi", "mpg", "mpeg", "webm"
+        ]
+    )
+    reported_by = st.text_input("Your Name")
+    submitted = st.form_submit_button("Submit Report")
 
-# ---------------- FOLLOW-UP PAGE ----------------
-if page == "Follow-up Sheet":
-    st.title("📋 Follow-up Sheet")
-
-    with st.form("add_form", clear_on_submit=True):
-        section = st.selectbox("Section", ["RTG", "ARTG", "STS", "Spreader"])
-        equipment = st.selectbox("Equipment No.", list(range(1, 54)))
-        problem = st.text_area("Problem")
-        image = st.file_uploader("Upload Picture", type=["jpg", "jpeg", "png"])
-        audio = st.file_uploader("Upload Audio", type=["mp3", "wav"])
-        reported_by = st.text_input("Reported by")
-
-        submitted = st.form_submit_button("Add Follow-up")
-        if submitted:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            image_url, audio_url = "", ""
-
-            if image:
-                image_url = upload_to_cloudinary(image)
-            if audio:
-                audio_url = upload_to_cloudinary(audio)
-
-            add_followup({
-                "timestamp": timestamp,
+    if submitted:
+        if section and equipment and problem:
+            image_url = upload_to_cloudinary(image) if image else ""
+            audio_url = upload_to_cloudinary(audio) if audio else ""
+            new_row = {
                 "section": section,
                 "equipment": equipment,
                 "problem": problem,
                 "image_url": image_url,
                 "audio_url": audio_url,
-                "reported_by": reported_by
-            })
-            st.success("✅ Follow-up added successfully!")
+                "reported_by": reported_by,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            df.to_csv(CSV_FILE, index=False)
+            st.success("✅ Report submitted successfully!")
+        else:
+            st.warning("⚠️ Please fill in Section, Equipment, and Problem details.")
 
-    st.subheader("Follow-up Records")
-    df = load_followups()
-    if df.empty:
-        st.warning("⚠️ No follow-ups recorded yet.")
-    else:
-        for _, row in df.iterrows():
-            st.markdown(f"### {row['section']} — Equipment {row['equipment']}")
-            st.write(f"📝 **Problem:** {row['problem']}")
+
+# =============== Display All Reports ===============
+st.header("📋 All Reports")
+
+if not df.empty:
+    for _, row in df.iterrows():
+        with st.container():
+            st.markdown(f"### 🏭 {row['section']} — ⚡ {row['equipment']}")
+            st.write(f"**Problem:** {row['problem']}")
+
+            # Image
             if row['image_url']:
                 st.image(row['image_url'], width=200)
+
+            # Audio or Video
             if row['audio_url']:
-                st.audio(row['audio_url'])
-            st.caption(f"Reported by: {row['reported_by']} on {row['timestamp']}")
+                if any(row['audio_url'].lower().endswith(ext) for ext in [".mp4", ".mov", ".avi", ".mpg", ".mpeg", ".webm"]):
+                    st.video(row['audio_url'])
+                else:
+                    st.audio(row['audio_url'])
+
+            st.caption(f"Reported by {row['reported_by']} on {row['timestamp']}")
             st.markdown("---")
 
-        buffer = BytesIO()
-        df.to_excel(buffer, index=False, engine="openpyxl")
-        st.download_button("📥 Download Excel", buffer.getvalue(),
-                           file_name="followups.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-# ---------------- REPORTS PAGE ----------------
-elif page == "Reports":
-    st.title("📊 Reports")
-    df = load_followups()
-
-    if df.empty:
-        st.info("No data available.")
-    else:
-        st.metric("Total Follow-ups", len(df))
-        st.metric("Sections", df["section"].nunique())
-        st.metric("Reported By (Unique)", df["reported_by"].nunique())
+    # ========== Show Table/List at Bottom ==========
+    st.subheader("📑 Reports Table View")
+    st.dataframe(df)
+else:
+    st.info("No reports submitted yet.")
