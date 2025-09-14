@@ -74,7 +74,7 @@ def load_followups():
 
 # ---------------- SIDEBAR ----------------
 st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Go to", ["Follow-up Form", "Dashboard"])
+page = st.sidebar.radio("Go to", ["Follow-up Form", "Follow-up Sheet"])
 
 # ---------------- FOLLOW-UP PAGE ----------------
 if page == "Follow-up Form":
@@ -117,15 +117,15 @@ if page == "Follow-up Form":
             })
             st.success("✅ Follow-up added successfully!")
 # ---------------- DASHBOARD PAGE ----------------
-elif page == "Dashboard":
-    st.title("📊 Follow-up Dashboard")
+elif page == "Follow-up Sheet":
+    st.title("📊 Follow-up Sheet")
     df = load_followups()
 
     if df.empty:
         st.info("No follow-ups recorded yet.")
     else:
         # Create columns for visual display
-        st.subheader("📌 All Follow-ups")
+        st.subheader("All Follow-ups")
 
         # Build a styled table
         table_rows = []
