@@ -46,7 +46,7 @@ except gspread.exceptions.WorksheetNotFound:
     followup_ws = sh.add_worksheet(title="Followups", rows="1000", cols="20")
 
 headers = [
-    "timestamp", "equipment", "equipment_no", "section", "issue",
+    "timestamp", "equipment", "section", "location", "issue",
     "picture_url", "voice_url",
     "required_items", "reported_by", "resolved_by",
     "after_picture_url", "status"
@@ -81,12 +81,13 @@ if page == "Follow-up Form":
     st.title("📋 Add Follow-up Record")
 
     with st.form("add_form", clear_on_submit=True):
-        equipment = st.selectbox("Equipment", ["ARTG", "RTG", "QC", "ROS", "Spreader"])
+        equipment = st.selectbox("Equipment", ["ARTG", "RTG", "QC", "ROS", "SQ"])
         equipment_no = st.number_input("Equipment No.", min_value=1, step=1)
         section = st.selectbox("Section", ["Electrical", "Mechanical", "Welding"])
+        location = st.text_area("Location")
         issue = st.text_area("Issue / Problem")
         picture = st.file_uploader("Upload Picture", type=["jpg", "jpeg", "png"])
-        voice = st.file_uploader("Upload Voice Note (Audio/Video)", type=["mp3", "wav", "mp4", "m4a"])
+        voice = st.file_uploader("Upload Voice Note (Audio/Video)", type=["mp3","wav","aac","m4a","3gp","ogg","flac","webm"])
         reported_by = st.text_input("Reported by")
 
         submitted = st.form_submit_button("✅ Submit Follow-up")
@@ -101,9 +102,9 @@ if page == "Follow-up Form":
 
             add_followup({
                 "timestamp": timestamp,
-                "equipment": equipment,
-                "equipment_no": equipment_no,
+                "equipment": equipment-equipment_no,
                 "section": section,
+                "location": location,
                 "issue": issue,
                 "picture_url": picture_url,
                 "voice_url": voice_url,
