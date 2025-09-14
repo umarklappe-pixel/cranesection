@@ -1,63 +1,73 @@
 import streamlit as st
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-import io
+import requests
+from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
 
-# ---------------- CONFIG ----------------
+# Setup
+CLIENT_ID = st.secrets["google"]["client_id"]
+CLIENT_SECRET = st.secrets["google"]["client_secret"]
+REDIRECT_URI = st.secrets["google"]["redirect_uri"]
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
-FOLDER_ID = "1v3NjAC6RwtmUrsR2qtzDLPw6hcDJzqSU"  # Replace with your Google Drive folder ID
 
-# Load credentials from Streamlit secrets
-creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"], scopes=SCOPES
-)
+if "credentials" not in st.session_state:
+    # Step 1: Ask user to log in
+    if st.button("Login with Google"):
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": CLIENT_ID,
+                    "client_secret": CLIENT_SECRET,
+                    "redirect_uris": [REDIRECT_URI],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=SCOPES
+        )
+        flow.redirect_uri = REDIRECT_URI
+        auth_url, state = flow.authorization_url(prompt="consent", access_type="offline")
+        st.session_state["state"] = state
+        st.markdown(f"[Click here to authorize]({auth_url})")
 
-# Connect to Google Drive
-drive_service = build("drive", "v3", credentials=creds)
+    # Step 2: Handle the callback (extract `code` from the URL)
+    code = st.query_params.get("code")
+    state = st.query_params.get("state")
+    if code and state == st.session_state.get("state"):
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": CLIENT_ID,
+                    "client_secret": CLIENT_SECRET,
+                    "redirect_uris": [REDIRECT_URI],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=SCOPES,
+            state=state
+        )
+        flow.redirect_uri = REDIRECT_URI
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+        st.session_state["credentials"] = creds.to_json()
+        st.success("Login successful! You can now upload files.")
+else:
+    creds = Credentials.from_authorized_user_info(eval(st.session_state["credentials"]))
+    st.write("✅ Logged in to Google Drive!")
 
-# ---------------- UPLOAD FUNCTION ----------------
-def upload_to_drive(uploaded_file, folder_id=None):
-    file_metadata = {"name": uploaded_file.name}
-    if folder_id:
-        file_metadata["parents"] = [folder_id]
-
-    media = MediaIoBaseUpload(
-        io.BytesIO(uploaded_file.getbuffer()),
-        mimetype=uploaded_file.type,
-        resumable=False   # ✅ FIXED
-    )
-
-    file = drive_service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id, webViewLink"
-    ).execute()
-
-    # Make file public
-    drive_service.permissions().create(
-        fileId=file["id"],
-        body={"role": "reader", "type": "anyone"},
-    ).execute()
-
-    return {
-        "id": file["id"],
-        "webViewLink": file["webViewLink"],
-        "directLink": f"https://drive.google.com/uc?export=view&id={file['id']}"
-    }
-
-# ---------------- STREAMLIT UI ----------------
-st.title("📤 Upload File to Google Drive")
-
-uploaded_file = st.file_uploader("Choose a file", type=["jpg", "jpeg", "png", "pdf"])
-
-if uploaded_file is not None:
-    if st.button("Upload to Google Drive"):
-        try:
-            result = upload_to_drive(uploaded_file, FOLDER_ID)
-            st.success("✅ File uploaded successfully!")
-            st.write("🔗 [Open in Google Drive](" + result["webViewLink"] + ")")
-            if uploaded_file.type.startswith("image/"):
-                st.image(result["directLink"], caption="Uploaded Preview", use_column_width=True)
-        except Exception as e:
-            st.error(f"❌ Upload failed: {e}")
+    uploaded = st.file_uploader("Choose a file to upload")
+    if uploaded:
+        # Upload file to Google Drive
+        files = {
+            'data': ('metadata', '{"name": "'+uploaded.name+'"}', 'application/json'),
+            'file': uploaded
+        }
+        headers = {"Authorization": "Bearer " + creds.token}
+        r = requests.post(
+            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+            headers=headers, files=files
+        )
+        if r.status_code == 200:
+            st.success("File uploaded to your Drive!")
+        else:
+            st.error("Upload failed: " + r.text)
