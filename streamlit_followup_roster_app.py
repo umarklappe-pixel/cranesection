@@ -1,16 +1,18 @@
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+import streamlit as st
 
 # ---------- CONFIG ----------
-# Replace with your Drive folder ID
-FOLDER_ID = "1v3NjAC6RwtmUrsR2qtzDLPw6hcDJzqSU"
+FOLDER_ID = "1v3NjAC6RwtmUrsR2qtzDLPw6hcDJzqSU"  # Replace with your Google Drive folder ID
 
 # Google Drive API scopes
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
-# Load credentials from service account JSON
-creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+# Load credentials from Streamlit Secrets instead of file
+creds = Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"], scopes=SCOPES
+)
 
 # Build Drive service
 drive_service = build("drive", "v3", credentials=creds)
@@ -43,12 +45,3 @@ def upload_to_drive(file_path, file_name, folder_id=None):
     direct_link = f"https://drive.google.com/uc?export=view&id={file_id}"
 
     return {"id": file_id, "webViewLink": web_link, "directLink": direct_link}
-
-
-# ---------- TEST ----------
-if __name__ == "__main__":
-    # Example: upload a test image
-    result = upload_to_drive("test_image.jpg", "MyUploadedImage.jpg", FOLDER_ID)
-    print("✅ Uploaded successfully!")
-    print("Web Link:", result["webViewLink"])
-    print("Direct Image Link:", result["directLink"])
