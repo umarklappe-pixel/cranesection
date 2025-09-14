@@ -1,31 +1,28 @@
+import streamlit as st
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-import streamlit as st
+from googleapiclient.http import MediaIoBaseUpload
+import io
 
-# ---------- CONFIG ----------
+# ---------------- CONFIG ----------------
+SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 FOLDER_ID = "1v3NjAC6RwtmUrsR2qtzDLPw6hcDJzqSU"  # Replace with your Google Drive folder ID
 
-# Google Drive API scopes
-SCOPES = ["https://www.googleapis.com/auth/drive.file"]
-
-# Load credentials from Streamlit Secrets instead of file
+# Load credentials from Streamlit secrets
 creds = Credentials.from_service_account_info(
     st.secrets["gcp_service_account"], scopes=SCOPES
 )
 
-# Build Drive service
+# Connect to Google Drive
 drive_service = build("drive", "v3", credentials=creds)
 
-
-# ---------- FUNCTION ----------
-def upload_to_drive(file_path, file_name, folder_id=None):
-    """Uploads file to Google Drive and returns shareable link."""
-    file_metadata = {"name": file_name}
+# ---------------- UPLOAD FUNCTION ----------------
+def upload_to_drive(uploaded_file, folder_id=None):
+    file_metadata = {"name": uploaded_file.name}
     if folder_id:
         file_metadata["parents"] = [folder_id]
 
-    media = MediaFileUpload(file_path, resumable=True)
+    media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getbuffer()), mimetype=uploaded_file.type, resumable=True)
 
     file = drive_service.files().create(
         body=file_metadata,
@@ -33,15 +30,27 @@ def upload_to_drive(file_path, file_name, folder_id=None):
         fields="id, webViewLink"
     ).execute()
 
-    file_id = file.get("id")
-
-    # Make file shareable (anyone with link can view)
+    # Make file public
     drive_service.permissions().create(
-        fileId=file_id,
+        fileId=file["id"],
         body={"role": "reader", "type": "anyone"},
     ).execute()
 
-    web_link = file.get("webViewLink")
-    direct_link = f"https://drive.google.com/uc?export=view&id={file_id}"
+    # Return links
+    return {
+        "id": file["id"],
+        "webViewLink": file["webViewLink"],
+        "directLink": f"https://drive.google.com/uc?export=view&id={file['id']}"
+    }
 
-    return {"id": file_id, "webViewLink": web_link, "directLink": direct_link}
+# ---------------- STREAMLIT UI ----------------
+st.title("📤 Upload File to Google Drive")
+
+uploaded_file = st.file_uploader("Choose a file", type=["jpg", "jpeg", "png", "pdf"])
+
+if uploaded_file is not None:
+    if st.button("Upload to Google Drive"):
+        result = upload_to_drive(uploaded_file, FOLDER_ID)
+        st.success("✅ File uploaded successfully!")
+        st.write("🔗 [Open in Google Drive](" + result["webViewLink"] + ")")
+        st.image(result["directLink"], caption="Uploaded Preview", use_column_width=True)
