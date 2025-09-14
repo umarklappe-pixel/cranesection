@@ -1,24 +1,27 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 from io import BytesIO
-import os
 
 # ---------------------- CONFIG ----------------------
 st.set_page_config(page_title="Follow-up & Roster Dashboard", layout="wide")
 
 # ---------------------- GOOGLE SHEETS ----------------------
-# Define scope and credentials
-scope = ["https://spreadsheets.google.com/feeds",
-         "https://www.googleapis.com/auth/drive"]
+# Define scope
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 
-# Load credentials from Streamlit Secrets (safer than committing JSON)
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+# Load credentials from Streamlit Secrets
+creds = Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"], scopes=scope
+)
 client = gspread.authorize(creds)
 
-# Open Google Sheets (make sure your service account email has editor access)
+# Open Google Sheets (make sure your service account email has Editor access)
 SHEET_NAME = "Crane Follow-up Database"
 followup_ws = client.open(SHEET_NAME).worksheet("Followups")
 roster_ws = client.open(SHEET_NAME).worksheet("Roster")
@@ -96,9 +99,12 @@ if page == "Follow-up Sheet":
     if not df.empty:
         buffer = BytesIO()
         df.to_excel(buffer, index=False, engine="openpyxl")
-        st.download_button("📥 Download Excel", buffer.getvalue(),
-                           file_name="followups.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(
+            "📥 Download Excel",
+            buffer.getvalue(),
+            file_name="followups.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # ---------------------- ROSTER PAGE ----------------------
 elif page == "Weekly Roster":
@@ -112,9 +118,12 @@ elif page == "Weekly Roster":
 
     buffer = BytesIO()
     edited_df.to_excel(buffer, index=False, engine="openpyxl")
-    st.download_button("📥 Download Excel", buffer.getvalue(),
-                       file_name="roster.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    st.download_button(
+        "📥 Download Excel",
+        buffer.getvalue(),
+        file_name="roster.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # ---------------------- REPORTS PAGE ----------------------
 elif page == "Reports":
