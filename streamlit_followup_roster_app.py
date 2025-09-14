@@ -1,112 +1,54 @@
-import streamlit as st
-import pandas as pd
-import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
-from io import BytesIO
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
-# ---------------- CONFIG ----------------
-st.set_page_config(page_title="Follow-up & Roster Dashboard", layout="wide")
+# ---------- CONFIG ----------
+# Replace with your Drive folder ID
+FOLDER_ID = "1v3NjAC6RwtmUrsR2qtzDLPw6hcDJzqSU"
 
-# Google Sheets Scopes
-scope = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
+# Google Drive API scopes
+SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
-# Load credentials from Streamlit Secrets
-creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"], scopes=scope
-)
-client = gspread.authorize(creds)
+# Load credentials from service account JSON
+creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 
-# ---------------- SHEET CONNECTION ----------------
-SHEET_ID = "1fv-LQimF2XfCQ936Lj-kIukooQQUCJZOJsoM4SNAdjQ"
+# Build Drive service
+drive_service = build("drive", "v3", credentials=creds)
 
-try:
-    sh = client.open_by_key(SHEET_ID)
-    st.sidebar.success(f"Connected to: {sh.title}")
-except Exception as e:
-    st.error(f"❌ Failed to connect: {e}")
-    st.stop()
 
-# Ensure worksheets exist with correct headers
-try:
-    followup_ws = sh.worksheet("Followups")
-except gspread.exceptions.WorksheetNotFound:
-    followup_ws = sh.add_worksheet(title="Followups", rows="1000", cols="20")
+# ---------- FUNCTION ----------
+def upload_to_drive(file_path, file_name, folder_id=None):
+    """Uploads file to Google Drive and returns shareable link."""
+    file_metadata = {"name": file_name}
+    if folder_id:
+        file_metadata["parents"] = [folder_id]
 
-headers = ["timestamp", "section", "equipment", "problem", "note", "reported_by"]
-if followup_ws.row_values(1) != headers:
-    followup_ws.clear()
-    followup_ws.append_row(headers)
+    media = MediaFileUpload(file_path, resumable=True)
 
-# ---------------- FUNCTIONS ----------------
-def add_followup(data):
-    followup_ws.append_row(list(data.values()))
+    file = drive_service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id, webViewLink"
+    ).execute()
 
-def load_followups():
-    records = followup_ws.get_all_records()
-    return pd.DataFrame(records)
+    file_id = file.get("id")
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Go to", ["Follow-up Sheet", "Reports"])
+    # Make file shareable (anyone with link can view)
+    drive_service.permissions().create(
+        fileId=file_id,
+        body={"role": "reader", "type": "anyone"},
+    ).execute()
 
-# ---------------- FOLLOW-UP PAGE ----------------
-if page == "Follow-up Sheet":
-    st.title("📋 Follow-up Sheet")
+    web_link = file.get("webViewLink")
+    direct_link = f"https://drive.google.com/uc?export=view&id={file_id}"
 
-    with st.form("add_form", clear_on_submit=True):
-        section = st.selectbox("Section", ["RTG", "ARTG", "STS", "Spreader"])
-        equipment = st.selectbox("Equipment No.", list(range(1, 54)))
-        problem = st.text_area("Problem")
-        image = st.file_uploader("Upload Picture", type=["jpg", "jpeg", "png"])
-        reported_by = st.text_input("Reported by")
+    return {"id": file_id, "webViewLink": web_link, "directLink": direct_link}
 
-        submitted = st.form_submit_button("Add Follow-up")
-        if submitted:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            note = ""
-            if image:
-                # Save uploaded image locally
-                img_path = f"uploaded_{timestamp.replace(':','-')}.png"
-                with open(img_path, "wb") as f:
-                    f.write(image.getbuffer())
-                note = f"Image uploaded: {img_path}"  # placeholder text
-            
-            add_followup({
-                "timestamp": timestamp,
-                "section": section,
-                "equipment": equipment,
-                "problem": problem,
-                "note": note,
-                "reported_by": reported_by
-            })
-            st.success("✅ Follow-up added successfully!")
 
-    st.subheader("Follow-up Records")
-    df = load_followups()
-    if df.empty:
-        st.warning("⚠️ No follow-ups recorded yet.")
-    else:
-        st.dataframe(df)
-
-        buffer = BytesIO()
-        df.to_excel(buffer, index=False, engine="openpyxl")
-        st.download_button("📥 Download Excel", buffer.getvalue(),
-                           file_name="followups.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-# ---------------- REPORTS PAGE ----------------
-elif page == "Reports":
-    st.title("📊 Reports")
-    df = load_followups()
-
-    if df.empty:
-        st.info("No data available.")
-    else:
-        st.metric("Total Follow-ups", len(df))
-        st.metric("Sections", df["section"].nunique())
-        st.metric("Reported By (Unique)", df["reported_by"].nunique())
+# ---------- TEST ----------
+if __name__ == "__main__":
+    # Example: upload a test image
+    result = upload_to_drive("test_image.jpg", "MyUploadedImage.jpg", FOLDER_ID)
+    print("✅ Uploaded successfully!")
+    print("Web Link:", result["webViewLink"])
+    print("Direct Image Link:", result["directLink"])
