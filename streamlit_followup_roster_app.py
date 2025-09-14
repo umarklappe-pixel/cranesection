@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import cloudinary
+import cloudinary.uploader
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 from io import BytesIO
@@ -20,6 +22,13 @@ creds = Credentials.from_service_account_info(
 )
 client = gspread.authorize(creds)
 
+# Cloudinary Config
+cloudinary.config(
+    cloud_name=st.secrets["cloudinary"]["cloud_name"],
+    api_key=st.secrets["cloudinary"]["api_key"],
+    api_secret=st.secrets["cloudinary"]["api_secret"]
+)
+
 # ---------------- SHEET CONNECTION ----------------
 SHEET_ID = "1fv-LQimF2XfCQ936Lj-kIukooQQUCJZOJsoM4SNAdjQ"
 
@@ -30,18 +39,26 @@ except Exception as e:
     st.error(f"❌ Failed to connect: {e}")
     st.stop()
 
-# Ensure worksheets exist with correct headers
+# Ensure worksheet exists with correct headers
 try:
     followup_ws = sh.worksheet("Followups")
 except gspread.exceptions.WorksheetNotFound:
     followup_ws = sh.add_worksheet(title="Followups", rows="1000", cols="20")
 
-headers = ["timestamp", "section", "equipment", "problem", "note", "reported_by"]
+headers = ["timestamp", "section", "equipment", "problem", "image_url", "audio_url", "reported_by"]
 if followup_ws.row_values(1) != headers:
     followup_ws.clear()
     followup_ws.append_row(headers)
 
 # ---------------- FUNCTIONS ----------------
+def upload_to_cloudinary(file, folder="followups"):
+    result = cloudinary.uploader.upload(
+        file,
+        folder=folder,
+        resource_type="auto"
+    )
+    return result["secure_url"]
+
 def add_followup(data):
     followup_ws.append_row(list(data.values()))
 
@@ -62,26 +79,26 @@ if page == "Follow-up Sheet":
         equipment = st.selectbox("Equipment No.", list(range(1, 54)))
         problem = st.text_area("Problem")
         image = st.file_uploader("Upload Picture", type=["jpg", "jpeg", "png"])
+        audio = st.file_uploader("Upload Audio", type=["mp3", "wav"])
         reported_by = st.text_input("Reported by")
 
         submitted = st.form_submit_button("Add Follow-up")
         if submitted:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            note = ""
+            image_url, audio_url = "", ""
+
             if image:
-                # Save uploaded image locally
-                img_path = f"uploaded_{timestamp.replace(':','-')}.png"
-                with open(img_path, "wb") as f:
-                    f.write(image.getbuffer())
-                note = f"Image uploaded: {img_path}"  # placeholder text
-            
+                image_url = upload_to_cloudinary(image)
+            if audio:
+                audio_url = upload_to_cloudinary(audio)
+
             add_followup({
                 "timestamp": timestamp,
                 "section": section,
                 "equipment": equipment,
                 "problem": problem,
-                "note": note,
+                "image_url": image_url,
+                "audio_url": audio_url,
                 "reported_by": reported_by
             })
             st.success("✅ Follow-up added successfully!")
@@ -91,7 +108,15 @@ if page == "Follow-up Sheet":
     if df.empty:
         st.warning("⚠️ No follow-ups recorded yet.")
     else:
-        st.dataframe(df)
+        for _, row in df.iterrows():
+            st.markdown(f"### {row['section']} — Equipment {row['equipment']}")
+            st.write(f"📝 **Problem:** {row['problem']}")
+            if row['image_url']:
+                st.image(row['image_url'], width=200)
+            if row['audio_url']:
+                st.audio(row['audio_url'])
+            st.caption(f"Reported by: {row['reported_by']} on {row['timestamp']}")
+            st.markdown("---")
 
         buffer = BytesIO()
         df.to_excel(buffer, index=False, engine="openpyxl")
