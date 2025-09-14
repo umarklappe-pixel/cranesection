@@ -78,7 +78,7 @@ page = st.sidebar.radio("Go to", ["Follow-up Form", "Dashboard"])
 
 # ---------------- FOLLOW-UP PAGE ----------------
 if page == "Follow-up Form":
-    st.title("📋 Crane Follow-up")
+    st.title("📋 Add Follow-up")
 
     with st.form("add_form", clear_on_submit=True):
         equipment = st.selectbox("Equipment", ["ARTG", "RTG", "QC", "ROS", "SQ"])
