@@ -123,23 +123,33 @@ elif page == "Dashboard":
     if df.empty:
         st.info("No follow-ups recorded yet.")
     else:
+        st.subheader("📌 All Records")
+
         for _, row in df.iterrows():
-            st.markdown(f"### 🏗️ {row['equipment']} — Equipment {row['equipment_no']}")
-            st.write(f"**Section:** {row['section']}")
-            st.write(f"📝 **Issue:** {row['issue']}")
-            if row['picture_url']:
-                st.image(row['picture_url'], width=250)
-            if row['voice_url']:
-                if row['voice_url'].endswith((".mp4", ".m4a")):
-                    st.video(row['voice_url'])
-                else:
-                    st.audio(row['voice_url'])
-            st.caption(f"Reported by: {row['reported_by']} on {row['timestamp']}")
-            st.markdown("---")
+            with st.container():
+                st.markdown(f"### 🏗️ {row['equipment']} — Equipment {row['equipment_no']}")
+                st.write(f"**Section:** {row['section']}")
+                st.write(f"📝 **Issue:** {row['issue']}")
+
+                cols = st.columns([1, 2])  # layout for image + text/audio
+                with cols[0]:
+                    if row['picture_url']:
+                        st.image(row['picture_url'], caption="Picture", width=200)
+
+                with cols[1]:
+                    if row['voice_url']:
+                        if row['voice_url'].endswith((".mp4", ".m4a")):
+                            st.video(row['voice_url'])
+                        else:
+                            st.audio(row['voice_url'])
+
+                st.caption(f"👤 Reported by: {row['reported_by']} on {row['timestamp']}")
+                st.markdown("---")
 
         # Download option
+        st.subheader("📥 Export Data")
         buffer = BytesIO()
         df.to_excel(buffer, index=False, engine="openpyxl")
-        st.download_button("📥 Download Excel", buffer.getvalue(),
+        st.download_button("Download Excel", buffer.getvalue(),
                            file_name="followups.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
