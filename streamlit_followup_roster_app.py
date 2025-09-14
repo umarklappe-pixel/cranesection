@@ -170,6 +170,7 @@ elif page == "Dashboard":
         st.subheader("📥 Export Data")
         buffer = BytesIO()
         df.to_excel(buffer, index=False, engine="openpyxl")
+       
         st.download_button(
             "Download Excel",
             buffer.getvalue(),
@@ -177,7 +178,4 @@ elif page == "Dashboard":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        df.to_excel(buffer, index=False, engine="openpyxl")
-        st.download_button("Download Excel", buffer.getvalue(),
-                           file_name="followups.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        
