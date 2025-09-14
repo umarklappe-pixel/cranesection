@@ -1,59 +1,112 @@
 import streamlit as st
-import requests
-from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-import io
+import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
+from io import BytesIO
 
-st.set_page_config(page_title="Drive Uploader")
+# ---------------- CONFIG ----------------
+st.set_page_config(page_title="Follow-up & Roster Dashboard", layout="wide")
 
-CLIENT_ID = st.secrets["google"]["client_id"]
-CLIENT_SECRET = st.secrets["google"]["client_secret"]
-REDIRECT_URI = st.secrets["google"]["redirect_uri"]
-SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+# Google Sheets Scopes
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
-if "credentials" not in st.session_state:
-    # Step 1: Show login button
-    auth_url = (
-        "https://accounts.google.com/o/oauth2/v2/auth"
-        f"?client_id={CLIENT_ID}"
-        f"&redirect_uri={REDIRECT_URI}"
-        f"&response_type=code"
-        f"&scope={' '.join(SCOPES)}"
-        "&access_type=offline"
-        "&prompt=consent"
-    )
-    st.markdown(f"[🔑 Sign in with Google]({auth_url})")
+# Load credentials from Streamlit Secrets
+creds = Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"], scopes=scope
+)
+client = gspread.authorize(creds)
 
-    # Step 2: Handle OAuth redirect
-    code = st.query_params.get("code")
-    if code:
-        data = {
-            "code": code,
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "redirect_uri": REDIRECT_URI,
-            "grant_type": "authorization_code",
-        }
-        token = requests.post("https://oauth2.googleapis.com/token", data=data).json()
-        st.session_state.credentials = token
-        st.experimental_rerun()
+# ---------------- SHEET CONNECTION ----------------
+SHEET_ID = "1fv-LQimF2XfCQ936Lj-kIukooQQUCJZOJsoM4SNAdjQ"
 
-else:
-    # Step 3: Use Drive API with access token
-    token = st.session_state.credentials["access_token"]
-    drive_service = build("drive", "v3", credentials=None)
-    uploaded_file = st.file_uploader("Upload file", type=["jpg", "png", "pdf"])
+try:
+    sh = client.open_by_key(SHEET_ID)
+    st.sidebar.success(f"Connected to: {sh.title}")
+except Exception as e:
+    st.error(f"❌ Failed to connect: {e}")
+    st.stop()
 
-    if uploaded_file and st.button("Upload to Drive"):
-        media = MediaIoBaseUpload(
-            io.BytesIO(uploaded_file.getbuffer()),
-            mimetype=uploaded_file.type,
-            resumable=False
-        )
-        file = drive_service.files().create(
-            body={"name": uploaded_file.name},
-            media_body=media,
-            fields="id, webViewLink"
-        ).execute()
-        st.success(f"Uploaded: {file['webViewLink']}")
+# Ensure worksheets exist with correct headers
+try:
+    followup_ws = sh.worksheet("Followups")
+except gspread.exceptions.WorksheetNotFound:
+    followup_ws = sh.add_worksheet(title="Followups", rows="1000", cols="20")
+
+headers = ["timestamp", "section", "equipment", "problem", "note", "reported_by"]
+if followup_ws.row_values(1) != headers:
+    followup_ws.clear()
+    followup_ws.append_row(headers)
+
+# ---------------- FUNCTIONS ----------------
+def add_followup(data):
+    followup_ws.append_row(list(data.values()))
+
+def load_followups():
+    records = followup_ws.get_all_records()
+    return pd.DataFrame(records)
+
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("📌 Navigation")
+page = st.sidebar.radio("Go to", ["Follow-up Sheet", "Reports"])
+
+# ---------------- FOLLOW-UP PAGE ----------------
+if page == "Follow-up Sheet":
+    st.title("📋 Follow-up Sheet")
+
+    with st.form("add_form", clear_on_submit=True):
+        section = st.selectbox("Section", ["RTG", "ARTG", "STS", "Spreader"])
+        equipment = st.selectbox("Equipment No.", list(range(1, 54)))
+        problem = st.text_area("Problem")
+        image = st.file_uploader("Upload Picture", type=["jpg", "jpeg", "png"])
+        reported_by = st.text_input("Reported by")
+
+        submitted = st.form_submit_button("Add Follow-up")
+        if submitted:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            note = ""
+            if image:
+                # Save uploaded image locally
+                img_path = f"uploaded_{timestamp.replace(':','-')}.png"
+                with open(img_path, "wb") as f:
+                    f.write(image.getbuffer())
+                note = f"Image uploaded: {img_path}"  # placeholder text
+            
+            add_followup({
+                "timestamp": timestamp,
+                "section": section,
+                "equipment": equipment,
+                "problem": problem,
+                "note": note,
+                "reported_by": reported_by
+            })
+            st.success("✅ Follow-up added successfully!")
+
+    st.subheader("Follow-up Records")
+    df = load_followups()
+    if df.empty:
+        st.warning("⚠️ No follow-ups recorded yet.")
+    else:
+        st.dataframe(df)
+
+        buffer = BytesIO()
+        df.to_excel(buffer, index=False, engine="openpyxl")
+        st.download_button("📥 Download Excel", buffer.getvalue(),
+                           file_name="followups.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# ---------------- REPORTS PAGE ----------------
+elif page == "Reports":
+    st.title("📊 Reports")
+    df = load_followups()
+
+    if df.empty:
+        st.info("No data available.")
+    else:
+        st.metric("Total Follow-ups", len(df))
+        st.metric("Sections", df["section"].nunique())
+        st.metric("Reported By (Unique)", df["reported_by"].nunique())
