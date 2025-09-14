@@ -4,39 +4,36 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # ---------------- CONFIG ----------------
-st.set_page_config(page_title="Google Sheets Test", layout="wide")
+st.set_page_config(page_title="Google Sheet Connect Test", layout="wide")
 
-# Scopes required
+# Scopes needed
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Load credentials from Streamlit secrets
+# Load credentials from Streamlit Secrets
 creds = Credentials.from_service_account_info(
     st.secrets["gcp_service_account"], scopes=scope
 )
 
-# Authorize gspread
 client = gspread.authorize(creds)
 
-# ---------------- CONNECT TO SHEET ----------------
-# ⚠️ Replace this with your actual sheet URL
-SHEET_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+# ---------------- CONNECT USING SHEET ID ----------------
+SHEET_ID = "1fv-LQimF2XfCQ936Lj-kIukooQQUCJZOJsoM4SNAdjQ"
 
 try:
-    sheet = client.open_by_url(SHEET_URL)
-    worksheet = sheet.get_worksheet(0)  # first sheet
-    st.success(f"✅ Connected to: {sheet.title}")
+    sh = client.open_by_key(SHEET_ID)
+    worksheet = sh.get_worksheet(0)  # first worksheet/tab
+    st.success(f"✅ Connected to Spreadsheet: {sh.title}")
 
-    # Load records into DataFrame
     records = worksheet.get_all_records()
     df = pd.DataFrame(records)
 
     if df.empty:
-        st.warning("Sheet is empty. Try adding some rows.")
+        st.warning("Sheet exists but no data (empty).")
     else:
         st.dataframe(df)
 
 except Exception as e:
-    st.error(f"❌ Failed to connect: {e}")
+    st.error(f"❌ Connection failed: {e}")
