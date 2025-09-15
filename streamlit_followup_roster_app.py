@@ -86,7 +86,7 @@ if page == "Follow-up Form":
         section = st.selectbox("Section", ["Electrical", "Mechanical", "Welding"])
         location = st.text_area("Location")
         issue = st.text_area("Issue / Problem")
-        picture = st.file_uploader("Upload Picture", type=["jpg", "jpeg", "png"])
+        picture = st.file_uploader("Upload Picture", type=["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp", "heic"])
         voice = st.file_uploader("Upload Voice Note (Audio/Video)", type=["mp3","wav","aac","m4a","ogg","flac","mp4","mov","webm","mkv","avi","wmv","3gp"]
 )
         reported_by = st.text_input("Reported by")
