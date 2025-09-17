@@ -42,16 +42,8 @@ if followup_ws.row_values(1) != headers:
     followup_ws.append_row(headers)
 
 # ---------------- FUNCTIONS ----------------
-#def add_followup(data):
-#    followup_ws.append_row(list(data.values()))
-
-def add_followup(data):
-    row = [data.get(h, "") for h in headers]   # align with headers
-    followup_ws.append_row(
-        row,
-        value_input_option="USER_ENTERED",
-        table_range="A1"   # ensures row starts at column A
-    )
+def add_followup(data, start_col=1):
+    followup_ws.append_row(list(data.values()))
 
 
 def load_followups():
