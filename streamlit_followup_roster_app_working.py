@@ -42,7 +42,7 @@ if followup_ws.row_values(1) != headers:
     followup_ws.append_row(headers)
 
 # ---------------- FUNCTIONS ----------------
-def add_followup(data, start_col=1):
+def add_followup(data):
     followup_ws.append_row(list(data.values()))
 
 
