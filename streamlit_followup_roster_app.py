@@ -125,6 +125,9 @@ elif page == "Follow-up Sheet":
         st.info("No follow-ups recorded yet.")
     else:
         # Create columns for visual display
+        
+        df = df.iloc[::-1].reset_index(drop=True)
+
         st.subheader("All Follow-ups")
 
         # Build a styled table
